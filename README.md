@@ -2,7 +2,7 @@
 ## multiplexing socks5 back-connect proxy
 
 **how it works, short diagram**
-![screenshot](docs/stun_diagram.png)
+![screenshot](docs/sctun_diagram.png)
 
 build use Makefile
 ````bash
