@@ -2,7 +2,7 @@
 ## multiplexing socks5 back-connect proxy
 
 **how it works, short diagram**
-![screenshot](https://sun9-26.userapi.com/c855428/v855428343/2259bb/VkCn_QNNcH8.jpg)
+![screenshot](https://sun9-3.userapi.com/c813024/v813024343/93922/wqX4dZxtF1Y.jpg)
 
 build use Makefile
 ````bash
