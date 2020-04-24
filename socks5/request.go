@@ -2,14 +2,11 @@ package socks5
 
 import (
 	"fmt"
+	"golang.org/x/net/context"
 	"io"
-	"log"
 	"net"
 	"strconv"
 	"strings"
-	"sync"
-
-	"golang.org/x/net/context"
 )
 
 const (
@@ -122,7 +119,6 @@ func (s *Server) handleRequest(req *Request, conn net.Conn) error {
 	// Resolve the address if we have a FQDN
 	dest := req.DestAddr
 	if dest.FQDN != "" {
-		log.Println("dest.FQDN -> ", dest.FQDN)
 		ctx_, addr, err := s.config.Resolver.Resolve(ctx, dest.FQDN)
 		if err != nil {
 			if err := sendReply(conn, hostUnreachable, nil); err != nil {
@@ -200,37 +196,18 @@ func (s *Server) handleConnect(ctx context.Context, conn net.Conn, req *Request)
 		return fmt.Errorf("Failed to send reply: %v", err)
 	}
 
-	// Start proxying
-	go func(dst net.Conn, src io.Reader) {
-		buf := make([]byte, 2<<14)
-		for {
-			n, err := src.Read(buf)
-			if err != nil {
-				return
-			}
-			if _, err := dst.Write(buf[:n]); err != nil {
-				log.Println(err)
-				return
-			}
-		}
-	}(target, req.bufConn)
+	var errCh = make(chan error, 1)
+	go proxy(target, req.bufConn, errCh)
+	go proxy(conn, target, errCh)
 
-	wg := &sync.WaitGroup{}
-	wg.Add(1)
-	go func(dst net.Conn, src io.Reader, wg *sync.WaitGroup) {
-		defer wg.Done()
-		buf := make([]byte, 2<<14)
-		for {
-			n, err := src.Read(buf)
-			if err != nil {
-				return
-			}
-			if _, err := dst.Write(buf[:n]); err != nil {
-				log.Println(err)
-			}
+	for i := 0; i < 1; i++ {
+		e := <-errCh
+		if e != nil {
+			// return from this function closes target (and conn).
+			return e
 		}
-	}(conn, target, wg)
-	wg.Wait()
+	}
+
 	return nil
 }
 

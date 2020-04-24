@@ -108,11 +108,10 @@ func handle(conn net.Conn, cerr chan<- error) {
 
 		//non overhead allocate buffer, with fix size
 		buf := make([]byte, stream.LengthRead())
-		if _, err := stream.Read(buf); err != nil {
+		if _, err := io.ReadAtLeast(stream, buf, stream.LengthRead()); err != nil {
 			cerr <- err
 			return
 		}
-
 		/*
 			search pipeWriter in map,
 			if found it means that the socks5 connection already exists and wait data,
@@ -135,7 +134,6 @@ func handle(conn net.Conn, cerr chan<- error) {
 		//spawn new mux for one uniq SID
 		go func(conn *mux.Stream, r *io.PipeReader, w *io.PipeWriter) {
 			defer func() {
-				log.Println("pipe shutdown")
 				pipeKV.Delete(conn.SID())
 				r.Close()
 				w.Close()

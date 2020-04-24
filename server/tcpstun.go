@@ -9,10 +9,11 @@ import (
 )
 
 type Server struct {
-	conns chan net.Conn
-	errs  chan error
-	hub   *netpack.Hub
-	addr  string
+	conns      chan net.Conn
+	errs       chan error
+	hub        *netpack.Hub
+	addr       string
+	ExternalIP string
 }
 
 //Run start master tunnel
@@ -21,6 +22,7 @@ func (s *Server) Run(ctx context.Context, addr string) (err error) {
 	s.conns = make(chan net.Conn, 100)
 	s.errs = make(chan error, 100)
 	s.hub = netpack.NewHub()
+	s.hub.ExternalIP = s.ExternalIP
 	s.addr = addr
 
 	go s.listen()

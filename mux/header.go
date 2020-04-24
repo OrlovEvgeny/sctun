@@ -3,6 +3,7 @@ package mux
 import (
 	"encoding/binary"
 	"errors"
+	"io"
 	"net"
 )
 
@@ -37,7 +38,7 @@ func newHeaderFrame(sid, length uint32) *header {
 	hdr := &header{
 		version: version,
 		length:  length,
-		cmd:     cmdSYN,
+		cmd:     cmdPSH,
 		sid:     sid,
 	}
 
@@ -48,7 +49,7 @@ func newHeaderFrame(sid, length uint32) *header {
 func (h *header) write() []byte {
 	buf := make([]byte, headerSize)
 	buf[0] = version
-	buf[1] = cmdSYN
+	buf[1] = cmdPSH
 	binary.LittleEndian.PutUint32(buf[2:], h.length)
 	binary.LittleEndian.PutUint32(buf[6:headerSize], h.sid)
 	return buf
@@ -57,7 +58,7 @@ func (h *header) write() []byte {
 //reade
 func (h *header) read(conn net.Conn) error {
 	buf := make([]byte, headerSize)
-	_, err := conn.Read(buf)
+	_, err := io.ReadAtLeast(conn, buf, headerSize)
 	if err != nil {
 		return err
 	}

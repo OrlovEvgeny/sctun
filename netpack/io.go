@@ -1,12 +1,10 @@
 package netpack
 
 import (
-	"fmt"
 	"github.com/OrlovEvgeny/sctun/mux"
 	"io"
 	"log"
 	"net"
-	"time"
 )
 
 //muxRoute this is a router inside one slave node
@@ -55,6 +53,8 @@ func (ph *proxyNode) handle(conn net.Conn) {
 		ph.waitGroup.Done()
 	}()
 
+	//new stream with current session id
+	stream := mux.OpenStream(sid, ph.dstSession)
 	buf := make([]byte, bufSize)
 	for {
 		select {
@@ -63,19 +63,17 @@ func (ph *proxyNode) handle(conn net.Conn) {
 			return
 		default:
 		}
-		conn.SetDeadline(time.Now().Add(1e9))
+
 		n, err := conn.Read(buf)
 		if err != nil {
 			if err != io.EOF {
-				fmt.Println("handle read - ", err)
+				log.Printf("handle for %d sid, read - %s\n", sid, err.Error())
 			}
 			return
 		}
 
-		//new stream with current session id
-		stream := mux.OpenStream(sid, ph.dstSession)
 		if _, err := stream.Write(buf[:n]); err != nil {
-			log.Println("handle stream.Write - ", err)
+			log.Printf("handle for %d sid, write - %s\n", sid, err.Error())
 			return
 		}
 	}
