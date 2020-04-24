@@ -23,12 +23,12 @@ func (s *Server) Run(ctx context.Context, addr string) (err error) {
 	s.hub = netpack.NewHub()
 	s.addr = addr
 
+	go s.listen()
+
 	defer func() {
 		cancel()
 		close(s.conns)
 	}()
-
-	go s.listen()
 
 	for {
 		select {

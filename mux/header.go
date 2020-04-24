@@ -65,6 +65,7 @@ func (h *header) read(conn net.Conn) error {
 	h.cmd = buf[1]
 	h.length = binary.LittleEndian.Uint32(buf[2:])
 	h.sid = binary.LittleEndian.Uint32(buf[6:headerSize])
+
 	if h.version != version {
 		return errors.New("version not support")
 	}

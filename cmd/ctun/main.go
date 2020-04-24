@@ -26,12 +26,12 @@ var (
 )
 
 func init() {
-	flag.StringVar(&addr, "master", defaultAddr, "--master "+defaultAddr)
+	flag.StringVar(&addr, "master", defaultAddr, "--master <ip_master_server>")
 	flag.Parse()
 }
 
 func main() {
-	cerr := make(chan error, 100)
+	cerr := make(chan error, 1000)
 	go logger(cerr)
 
 	srvDialer(cerr)
@@ -42,11 +42,10 @@ func logger(cerr <-chan error) {
 	for {
 		err := <-cerr
 
-		switch err {
-		case io.EOF:
+		if err == io.EOF {
 			log.Println("server close connect")
-			continue
 		}
+
 		log.Println(err)
 	}
 }
@@ -122,6 +121,7 @@ func handle(conn net.Conn, cerr chan<- error) {
 		if value, ok := pipeKV.Load(stream.SID()); ok {
 			w := value.(*io.PipeWriter)
 			if _, err := w.Write(buf); err != nil {
+				log.Println("pipe write error")
 				cerr <- err
 			}
 			continue
@@ -135,12 +135,14 @@ func handle(conn net.Conn, cerr chan<- error) {
 		//spawn new mux for one uniq SID
 		go func(conn *mux.Stream, r *io.PipeReader, w *io.PipeWriter) {
 			defer func() {
+				log.Println("pipe shutdown")
 				pipeKV.Delete(conn.SID())
 				r.Close()
 				w.Close()
 			}()
+
 			if err := srvSocks5.MuxConn(conn, r); err != nil {
-				cerr <- err
+				log.Println(err)
 			}
 
 		}(stream, rpipe, wpipe)

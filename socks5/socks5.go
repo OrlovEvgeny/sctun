@@ -179,7 +179,6 @@ func (s *Server) MuxConn(conn *mux.Stream, reader *io.PipeReader) error {
 		s.config.Logger.Printf("[ERR] socks: Failed to get version byte: %v", err)
 		return err
 	}
-
 	//Ensure we are compatible
 	if version[0] != socks5Version {
 		err := fmt.Errorf("Unsupported SOCKS version: %v", version)

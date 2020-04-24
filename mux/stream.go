@@ -32,9 +32,10 @@ func (s *Stream) WriteSid(sid uint32, b []byte) (n int, err error) {
 	hdr := newHeaderFrame(sid, uint32(bsize))
 	headFrame := hdr.write()
 
-	buf := make([]byte, 0, len(headFrame)+bsize)
+	buf := make([]byte, 0, headerSize+bsize)
 	buf = append(buf, headFrame...)
 	buf = append(buf, b...)
+
 	n, err = s.conn.Write(buf)
 	if n > 0 {
 		n -= headerSize
@@ -73,8 +74,8 @@ func (s *Stream) SID() uint32 {
 }
 
 //LengthRead return current payload size
-func (s *Stream) LengthRead() uint32 {
-	return s.hdr.length
+func (s *Stream) LengthRead() int {
+	return int(s.hdr.length)
 }
 
 //readHeader

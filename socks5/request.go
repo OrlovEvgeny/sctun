@@ -3,9 +3,11 @@ package socks5
 import (
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"strconv"
 	"strings"
+	"sync"
 
 	"golang.org/x/net/context"
 )
@@ -81,10 +83,10 @@ type Request struct {
 	bufConn      io.Reader
 }
 
-type conn interface {
-	Write([]byte) (int, error)
-	RemoteAddr() net.Addr
-}
+//type conn interface {
+//	Write([]byte) (int, error)
+//	RemoteAddr() net.Addr
+//}
 
 // NewRequest creates a new Request from the tcp connection
 func NewRequest(bufConn io.Reader) (*Request, error) {
@@ -115,12 +117,12 @@ func NewRequest(bufConn io.Reader) (*Request, error) {
 }
 
 // handleRequest is used for request processing after authentication
-func (s *Server) handleRequest(req *Request, conn conn) error {
+func (s *Server) handleRequest(req *Request, conn net.Conn) error {
 	ctx := context.Background()
-
 	// Resolve the address if we have a FQDN
 	dest := req.DestAddr
 	if dest.FQDN != "" {
+		log.Println("dest.FQDN -> ", dest.FQDN)
 		ctx_, addr, err := s.config.Resolver.Resolve(ctx, dest.FQDN)
 		if err != nil {
 			if err := sendReply(conn, hostUnreachable, nil); err != nil {
@@ -143,8 +145,10 @@ func (s *Server) handleRequest(req *Request, conn conn) error {
 	case ConnectCommand:
 		return s.handleConnect(ctx, conn, req)
 	case BindCommand:
+		fmt.Println("handle bind")
 		return s.handleBind(ctx, conn, req)
 	case AssociateCommand:
+		fmt.Println("handle associate")
 		return s.handleAssociate(ctx, conn, req)
 	default:
 		if err := sendReply(conn, commandNotSupported, nil); err != nil {
@@ -155,7 +159,7 @@ func (s *Server) handleRequest(req *Request, conn conn) error {
 }
 
 // handleConnect is used to handle a connect command
-func (s *Server) handleConnect(ctx context.Context, conn conn, req *Request) error {
+func (s *Server) handleConnect(ctx context.Context, conn net.Conn, req *Request) error {
 	// Check if this is allowed
 	if ctx_, ok := s.config.Rules.Allow(ctx, req); !ok {
 		if err := sendReply(conn, ruleFailure, nil); err != nil {
@@ -197,23 +201,41 @@ func (s *Server) handleConnect(ctx context.Context, conn conn, req *Request) err
 	}
 
 	// Start proxying
-	errCh := make(chan error, 2)
-	go proxy(target, req.bufConn, errCh)
-	go proxy(conn, target, errCh)
-
-	// Wait
-	for i := 0; i < 2; i++ {
-		e := <-errCh
-		if e != nil {
-			// return from this function closes target (and conn).
-			return e
+	go func(dst net.Conn, src io.Reader) {
+		buf := make([]byte, 2<<14)
+		for {
+			n, err := src.Read(buf)
+			if err != nil {
+				return
+			}
+			if _, err := dst.Write(buf[:n]); err != nil {
+				log.Println(err)
+				return
+			}
 		}
-	}
+	}(target, req.bufConn)
+
+	wg := &sync.WaitGroup{}
+	wg.Add(1)
+	go func(dst net.Conn, src io.Reader, wg *sync.WaitGroup) {
+		defer wg.Done()
+		buf := make([]byte, 2<<14)
+		for {
+			n, err := src.Read(buf)
+			if err != nil {
+				return
+			}
+			if _, err := dst.Write(buf[:n]); err != nil {
+				log.Println(err)
+			}
+		}
+	}(conn, target, wg)
+	wg.Wait()
 	return nil
 }
 
 // handleBind is used to handle a connect command
-func (s *Server) handleBind(ctx context.Context, conn conn, req *Request) error {
+func (s *Server) handleBind(ctx context.Context, conn net.Conn, req *Request) error {
 	// Check if this is allowed
 	if ctx_, ok := s.config.Rules.Allow(ctx, req); !ok {
 		if err := sendReply(conn, ruleFailure, nil); err != nil {
@@ -232,7 +254,7 @@ func (s *Server) handleBind(ctx context.Context, conn conn, req *Request) error 
 }
 
 // handleAssociate is used to handle a connect command
-func (s *Server) handleAssociate(ctx context.Context, conn conn, req *Request) error {
+func (s *Server) handleAssociate(ctx context.Context, conn net.Conn, req *Request) error {
 	// Check if this is allowed
 	if ctx_, ok := s.config.Rules.Allow(ctx, req); !ok {
 		if err := sendReply(conn, ruleFailure, nil); err != nil {
@@ -303,7 +325,7 @@ func readAddrSpec(r io.Reader) (*AddrSpec, error) {
 }
 
 // sendReply is used to send a reply message
-func sendReply(w io.Writer, resp uint8, addr *AddrSpec) error {
+func sendReply(w net.Conn, resp uint8, addr *AddrSpec) error {
 	// Format the address
 	var addrType uint8
 	var addrBody []byte

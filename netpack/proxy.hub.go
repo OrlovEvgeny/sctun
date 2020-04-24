@@ -5,6 +5,7 @@ import (
 	"net"
 	"strconv"
 	"sync"
+	"time"
 )
 
 const (
@@ -71,7 +72,9 @@ type proxyNode struct {
 	selfKV     *sync.Map //map for match client socks5 server and remote slave proxy node, key: sid; value: net.Conn
 	dstSession net.Conn  //destination proxy slave
 
-	quitSrv chan struct{} // shutdown server chan
+	//graceful
+	waitGroup *sync.WaitGroup
+	quitSrv   chan struct{} // shutdown server chan
 }
 
 //newNode
@@ -82,14 +85,16 @@ func (hub *Hub) newNode(conn net.Conn) *proxyNode {
 		dstSession: conn,
 		port:       nextport,
 		hub:        hub,
-		proxyAddr:  "0.0.0.0:" + strconv.Itoa(nextport),
-		quitSrv:    make(chan struct{}, 1),
+		proxyAddr:  net.JoinHostPort("0.0.0.0", strconv.Itoa(nextport)),
+		waitGroup:  &sync.WaitGroup{},
+		quitSrv:    make(chan struct{}),
 	}
 }
 
 //shutDown shutdown proxy node
-func (ph *proxyNode) shutDown() {
-	ph.quitSrv <- struct{}{}
+func (ph *proxyNode) shutdownNode() {
+	close(ph.quitSrv)
+	ph.waitGroup.Wait()
 }
 
 //runSrv proxy listener
@@ -103,30 +108,34 @@ func (ph *proxyNode) runSrv() {
 	defer func() {
 		log.Printf("proxy %s has been shutdown\n", addr.String())
 		ph.hub.portStack.put(ph.port)
+		ph.waitGroup.Done()
 	}()
-	wg := &sync.WaitGroup{}
 	for {
 		select {
 		case <-ph.quitSrv:
 			listener.Close()
-			wg.Wait()
 			return
 		default:
 		}
 
+		listener.SetDeadline(time.Now().Add(1e9))
 		conn, err := listener.Accept()
 		if err != nil {
+			if opErr, ok := err.(*net.OpError); ok && opErr.Timeout() {
+				continue
+			}
 			log.Printf("error accepting connection %v", err)
 			continue
 		}
-		wg.Add(1)
-		go ph.handle(wg, conn)
+		ph.waitGroup.Add(1)
+		go ph.handle(conn)
 	}
 }
 
 //JoinToSrv spawn new proxy node with proxy listener on new port
 func (hub *Hub) JoinToSrv(conn net.Conn) {
 	ph := hub.newNode(conn)
+	ph.waitGroup.Add(1)
 	go ph.runSrv()
 	go ph.muxRoute()
 }
