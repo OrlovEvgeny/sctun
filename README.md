@@ -36,6 +36,7 @@ make darwin
       -external string
             -external <ip_addr> (default "127.0.0.1")
        your server public external ip address
+
       -http string
             -http <ip_addr> (default "0.0.0.0:8181")
        it`s http listener address for an active clients list
