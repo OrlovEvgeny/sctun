@@ -62,7 +62,8 @@ example
 ./ctun --master you_public_ip:8080
 ````
 
-how to use. 
+**How to use** 
+
 After success connect client(ctun) to server(stun).
 You may go to http `http://you_public_ip:8081` and getting active ctun clients list,
 use they for your socks5 client
